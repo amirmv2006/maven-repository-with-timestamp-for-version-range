@@ -17,7 +17,7 @@ public class CopyInterceptorImpl
     @Override
     public void intercept(final RequestInterceptContext context) throws RequestInterceptException {
         try {
-            IOUtils.copy(context.getInputStream(), context.getOutputStream());
+            IOUtils.copy(context.getInputStream().apply(null), context.getOutputStream());
         } catch (IOException e) {
             throw new RequestInterceptException("Exc", e);
         }

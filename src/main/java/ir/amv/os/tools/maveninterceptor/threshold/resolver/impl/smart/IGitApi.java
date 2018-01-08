@@ -6,4 +6,6 @@ import java.io.IOException;
 
 public interface IGitApi {
     String getLastMergedCommitId(String branchName) throws IOException, GitAPIException;
+
+    void invalidateBranchCache(String branchName);
 }

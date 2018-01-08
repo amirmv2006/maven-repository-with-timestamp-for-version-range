@@ -3,8 +3,10 @@ package ir.amv.os.tools.maveninterceptor.interceptor.impl;
 import ir.amv.os.tools.maveninterceptor.interceptor.IRequestInterceptor;
 import ir.amv.os.tools.maveninterceptor.interceptor.RequestInterceptContext;
 import ir.amv.os.tools.maveninterceptor.interceptor.exc.RequestInterceptException;
+import ir.amv.os.tools.maveninterceptor.interceptor.impl.artifactory.IArtifactoryApi;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -57,30 +59,33 @@ public class VersionRangeTimestampInterceptorImpl
     // date
     private WaitASecondMap<String, String> versionSHA1Map = new WaitASecondMap<>();
     private WaitASecondMap<String, String> versionMD5Map = new WaitASecondMap<>();
+    @Autowired
+    private IArtifactoryApi artifactoryApi;
 
     @Override
     public int rank() {
-        return 0;
+        return 1;
     }
 
     @Override
     public void intercept(final RequestInterceptContext context) throws RequestInterceptException {
-        if (context.getRequestURI().endsWith("maven-metadata.xml")) {
+        String requestURI = context.getRequestURI();
+        if (requestURI.endsWith("maven-metadata.xml")) {
             try {
-                LOGGER.info("got request for maven-metadata: '{}', threshold: '{}'", context.getRequestURI(), context
+                LOGGER.info("got request for maven-metadata: '{}', threshold: '{}'", requestURI, context
                         .getThreshold());
-                String versionsHtmlUrl = context.getNewUrl().substring(0, context.getNewUrl().length() -
-                        "maven-metadata.xml".length());
-                URLConnection connection = new URL(versionsHtmlUrl).openConnection();
-                InputStream inputStream = connection.getInputStream();
-                Map<String, Date> versionReleaseMap = parseVersionsHtml(inputStream);
+                String artifactPath = requestURI.substring(0, requestURI.length() - "maven-metadata.xml".length());
+                Map<String, Date> versionReleaseMap = artifactoryApi.getReleaseDatesFor(artifactPath);
                 LOGGER.debug("version release map: '{}', threshold: '{}'", versionReleaseMap, context.getThreshold());
-                String[] hashes = transformMetaData(context.getInputStream(), context.getOutputStream(), context.getThreshold(),
-                        versionReleaseMap, context.getRequestURI());
-                versionMD5Map.put(context.getRequestURI() + ".md5" + context.getThreshold().getTime(), hashes[0]);
-                versionSHA1Map.put(context.getRequestURI() + ".sha1" + context.getThreshold().getTime(), hashes[1]);
+                String[] hashes = transformMetaData(context.getInputStream().apply(null), context.getOutputStream(),
+                        context.getThreshold(), versionReleaseMap, requestURI);
+                versionMD5Map.put(requestURI + ".md5" + context.getThreshold().getTime(), hashes[0]);
+                versionSHA1Map.put(requestURI + ".sha1" + context.getThreshold().getTime(), hashes[1]);
                 context.setFinished(true);
             } catch (Exception e) {
+                // release the locks
+                versionMD5Map.put(requestURI + ".md5" + context.getThreshold().getTime(), N_A);
+                versionSHA1Map.put(requestURI + ".sha1" + context.getThreshold().getTime(), N_A);
                 throw new RequestInterceptException("Exception", e);
             }
         } else {
@@ -107,34 +112,6 @@ public class VersionRangeTimestampInterceptorImpl
                 throw new RequestInterceptException("Exception", e);
             }
         }
-    }
-
-    private Map<String, Date> parseVersionsHtml(InputStream is) throws IOException, ParseException {
-        Map<String, Date> result = new HashMap<>();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(is))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith("<a href=")) {
-                    StringTokenizer tokenizer = new StringTokenizer(line, " ");
-                    if (tokenizer.countTokens() == 5) {
-                        tokenizer.nextToken(); // <a
-                        String href = tokenizer.nextToken();// href=...
-
-                        int start = href.substring(0, href.length() - 1).lastIndexOf(">");
-                        int end = href.lastIndexOf("<");
-                        String version = href.substring(start + 1, end);
-                        if (version.endsWith("/")) {
-                            version = version.substring(0, version.length() - 1);
-                        }
-                        String date = tokenizer.nextToken();
-                        String time = tokenizer.nextToken();
-                        SimpleDateFormat sdf = new SimpleDateFormat("dd-MMM-yyyy HH:mm");
-                        result.put(version, sdf.parse(date + " " + time));
-                    }
-                }
-            }
-        }
-        return result;
     }
 
     private String[] transformMetaData(InputStream is, OutputStream os, final Date thresholdDate, Map<String, Date>

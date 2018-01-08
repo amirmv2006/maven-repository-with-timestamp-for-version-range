@@ -3,19 +3,21 @@ package ir.amv.os.tools.maveninterceptor.interceptor;
 import javax.servlet.ServletOutputStream;
 import java.io.InputStream;
 import java.util.Date;
+import java.util.Map;
+import java.util.function.Function;
 
 /**
  * @author Amir
  */
 public class RequestInterceptContext {
-    private InputStream inputStream;
+    private Function<Void, InputStream> inputStream;
     private ServletOutputStream outputStream;
     private String requestURI;
-    private String newUrl;
     private Date threshold;
     private Boolean finished;
+    private Map<String, String[]> paramMap;
 
-    public void setInputStream(final InputStream inputStream) {
+    public void setInputStream(final Function<Void, InputStream> inputStream) {
         this.inputStream = inputStream;
     }
 
@@ -27,11 +29,7 @@ public class RequestInterceptContext {
         this.requestURI = requestURI;
     }
 
-    public void setNewUrl(final String newUrl) {
-        this.newUrl = newUrl;
-    }
-
-    public InputStream getInputStream() {
+    public Function<Void, InputStream> getInputStream() {
         return inputStream;
     }
 
@@ -41,10 +39,6 @@ public class RequestInterceptContext {
 
     public String getRequestURI() {
         return requestURI;
-    }
-
-    public String getNewUrl() {
-        return newUrl;
     }
 
     public Date getThreshold() {
@@ -69,8 +63,15 @@ public class RequestInterceptContext {
                 "inputStream=" + inputStream +
                 ", outputStream=" + outputStream +
                 ", requestURI='" + requestURI + '\'' +
-                ", newUrl='" + newUrl + '\'' +
                 ", threshold=" + threshold +
                 '}';
+    }
+
+    public void setParamMap(final Map<String, String[]> paramMap) {
+        this.paramMap = paramMap;
+    }
+
+    public Map<String, String[]> getParamMap() {
+        return paramMap;
     }
 }

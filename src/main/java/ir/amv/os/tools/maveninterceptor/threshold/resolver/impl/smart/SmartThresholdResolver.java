@@ -5,7 +5,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
 
 /**
@@ -36,15 +35,8 @@ public class SmartThresholdResolver
         String branchName = branchNames[0];
         try {
             String lastMergedCommitId = gitApi.getLastMergedCommitId(branchName);
-            Long buildNoCounter = jenkinsApi.getLastBuild();
-            while (buildNoCounter > 0) {
-                List<String> buildCommitIds = jenkinsApi.getBuildCommitIds(buildNoCounter);
-                if (buildCommitIds.contains(lastMergedCommitId)) {
-                    return jenkinsApi.getBuildFinishDate(buildNoCounter);
-                }
-                buildNoCounter--;
-            }
-            return null;
+            Date finishDate = jenkinsApi.findSuccessfulBuildFinishDateForCommitId(lastMergedCommitId);
+            return finishDate == null ? new Date() : finishDate;
         } catch (Exception e) {
             e.printStackTrace();
             return null;

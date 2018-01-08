@@ -2,6 +2,7 @@ package ir.amv.os.tools.maveninterceptor.controller;
 
 import ir.amv.os.tools.maveninterceptor.interceptor.IRequestInterceptor;
 import ir.amv.os.tools.maveninterceptor.interceptor.RequestInterceptContext;
+import ir.amv.os.tools.maveninterceptor.interceptor.impl.artifactory.IArtifactoryApi;
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.IThresholdResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,8 +35,9 @@ import static org.apache.tomcat.util.http.fileupload.IOUtils.copy;
 public class MainController {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MainController.class);
-    @Value("${amir.remote.maven}")
-    private String remoteServer;
+
+    @Autowired
+    private IArtifactoryApi artifactoryApi;
 
     private List<IRequestInterceptor> requestInterceptors;
     private List<IThresholdResolver> thresholdResolvers;
@@ -51,16 +53,13 @@ public class MainController {
     public void serviceGet(HttpServletRequest request, HttpServletResponse response) throws IOException {
         String requestURI = request.getRequestURI();
         LOGGER.debug("Serving '{}'. request param map is {}", requestURI, request.getParameterMap());
-        String newUrl = remoteServer + requestURI;
-        URLConnection connection = new URL(newUrl).openConnection();
-        InputStream inputStream = connection.getInputStream();
         ServletOutputStream outputStream = response.getOutputStream();
 
         RequestInterceptContext context = new RequestInterceptContext();
-        context.setInputStream(inputStream);
+        context.setInputStream(aVoid -> artifactoryApi.download(requestURI));
         context.setOutputStream(outputStream);
         context.setRequestURI(requestURI);
-        context.setNewUrl(newUrl);
+        context.setParamMap(request.getParameterMap());
         for (IThresholdResolver thresholdResolver : thresholdResolvers) {
             
             Date date = thresholdResolver.resolveThreshold(request.getParameterMap());
@@ -89,20 +88,23 @@ public class MainController {
             RequestMethod.PUT,
     })
     public void servicePost(HttpServletRequest request, HttpServletResponse response) throws IOException {
-        String requestURI = request.getRequestURI();
-        String newUrl = remoteServer + requestURI;
-        URLConnection connection = new URL(newUrl).openConnection();
-        connection.setDoOutput(true);
-
-        ServletInputStream requestInputStream = request.getInputStream();
-        OutputStream connectionOutputStream = connection.getOutputStream();
-        copy(requestInputStream, connectionOutputStream);
-
-        InputStream connectionInputStream = connection.getInputStream();
-        ServletOutputStream responseOutputStream = response.getOutputStream();
-        copy(connectionInputStream, responseOutputStream);
-
-        response.getOutputStream().flush();
+        // THIS SHOULDN'T BE CALLED
+        LOGGER.error("Request method {} was called which is not handled now (Req URI:{})", request.getMethod(),
+                request.getRequestURI());
+//        String requestURI = request.getRequestURI();
+//        String newUrl = remoteServer + requestURI;
+//        URLConnection connection = new URL(newUrl).openConnection();
+//        connection.setDoOutput(true);
+//
+//        ServletInputStream requestInputStream = request.getInputStream();
+//        OutputStream connectionOutputStream = connection.getOutputStream();
+//        copy(requestInputStream, connectionOutputStream);
+//
+//        InputStream connectionInputStream = connection.getInputStream();
+//        ServletOutputStream responseOutputStream = response.getOutputStream();
+//        copy(connectionInputStream, responseOutputStream);
+//
+//        response.getOutputStream().flush();
     }
 
     @Autowired
