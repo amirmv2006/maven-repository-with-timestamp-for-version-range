@@ -92,7 +92,7 @@ public class GitApiImpl
                 RevWalk walk = new RevWalk(repository);
                 for (RevCommit revCommit : revCommits) {
                     if (walk.isMergedInto(walk.parseCommit(revCommit.getId()), walk.parseCommit(master))) {
-                        return revCommit.name();
+                        return revCommit.getParents()[1].getName(); // return original commit's name
                     }
                 }
                 skip += PAGE_SIZE;
