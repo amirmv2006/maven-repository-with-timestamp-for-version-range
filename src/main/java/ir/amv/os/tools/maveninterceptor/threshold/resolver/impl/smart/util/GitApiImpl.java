@@ -1,6 +1,7 @@
 package ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.util;
 
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.IGitApi;
+import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.IJenkinsApi;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -23,6 +24,8 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -38,6 +41,8 @@ public class GitApiImpl
 
     @Autowired
     private IGitApi selfProxiedInstance;
+    @Autowired
+    private IJenkinsApi jenkinsApi;
 
     @Value("${git.local.repo}")
     private String gitRepo;
@@ -54,7 +59,7 @@ public class GitApiImpl
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(username, password));
     }
 
-    @Scheduled(initialDelay = 60_000, fixedRate = 6 * 60 * 60_000)
+    @Scheduled(initialDelay = 10_000, fixedRate = 6 * 60 * 60_000)
     public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
         try (Repository repository = new FileRepository(gitRepo)) {
             Git git = new Git(repository);
@@ -67,8 +72,10 @@ public class GitApiImpl
                 }
                 LOGGER.debug("found remote branch: {}", branchRefName);
                 currentLiveBranches.add(branchRefName);
-                String lastMergedCommitId = selfProxiedInstance.getLastMergedCommitId(branchRefName);
-                LOGGER.debug("last merged commit to master for branch '{}' is {}", branchRefName, lastMergedCommitId);
+                List<String> lastMergedCommitId = selfProxiedInstance.getLastMergedCommitId(branchRefName);
+                Date finishDate = jenkinsApi.findSuccessfulBuildFinishDateForCommitId(lastMergedCommitId);
+                LOGGER.debug("last merged commit to master for branch '{}' is {} and the finish date for successful " +
+                                "build after this commit is {}", branchRefName, lastMergedCommitId, finishDate);
             }
             liveBranches.removeAll(currentLiveBranches);
             LOGGER.debug("invalidating cahce for obsolete branches {}", liveBranches);
@@ -79,7 +86,8 @@ public class GitApiImpl
 
     @Override
     @Cacheable(value = "branchCommits", key = "#branchName")
-    public synchronized String getLastMergedCommitId(final String branchName) throws IOException, GitAPIException {
+    public synchronized List<String> getLastMergedCommitId(final String branchName) throws IOException,
+            GitAPIException {
         LOGGER.info("getLastMergedCommitId for {}", branchName);
         liveBranches.add(branchName);
         try (Repository repository = new FileRepository(gitRepo)) {
@@ -92,7 +100,15 @@ public class GitApiImpl
                 RevWalk walk = new RevWalk(repository);
                 for (RevCommit revCommit : revCommits) {
                     if (walk.isMergedInto(walk.parseCommit(revCommit.getId()), walk.parseCommit(master))) {
-                        return revCommit.getParents()[1].getName(); // return original commit's name
+                        List<String> result = new ArrayList<>();
+                        result.add(revCommit.getName());
+                        RevCommit[] parents = revCommit.getParents();
+                        if (parents != null) {
+                            for (RevCommit parent : parents) {
+                                result.add(parent.getName());
+                            }
+                        }
+                        return result;
                     }
                 }
                 skip += PAGE_SIZE;

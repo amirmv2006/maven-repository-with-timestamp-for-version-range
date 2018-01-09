@@ -4,6 +4,7 @@ import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.util.Jenki
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 
 public interface IJenkinsApi {
     Long getLastBuild() throws IOException;
@@ -12,5 +13,5 @@ public interface IJenkinsApi {
 
     Date getBuildFinishDate(Long buildNo) throws IOException;
 
-    Date findSuccessfulBuildFinishDateForCommitId(String commitId) throws IOException;
+    Date findSuccessfulBuildFinishDateForCommitId(List<String> commitId) throws IOException;
 }

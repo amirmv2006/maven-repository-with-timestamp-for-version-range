@@ -32,8 +32,9 @@ import java.util.List;
 public class JenkinsApiImpl
         implements IJenkinsApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(JenkinsApiImpl.class);
+    private static final long MAX_BUILD_COUNT_CHECK = 50;
+    private static final String API_JSON = "/api/json?pretty=true";
 
-    public static final String API_JSON = "/api/json?pretty=true";
     @Value("${jenkins.server.master.job.address}")
     private String serverAddress;
 
@@ -156,18 +157,21 @@ public class JenkinsApiImpl
 
     @Override
     @Cacheable("commitBuildFinishDate")
-    public Date findSuccessfulBuildFinishDateForCommitId(String commitId) throws IOException {
+    public Date findSuccessfulBuildFinishDateForCommitId(List<String> commits) throws IOException {
         Long lastBuild = getLastBuild();
+        Long buildCounter = lastBuild;
         Long lastSuccessfulBuild = null;
-        while (lastBuild > 0) {
-            JenkinsBuildResult buildStats = selfProxiedInstance.getBuildStats(lastBuild);
+        while (lastBuild - buildCounter < MAX_BUILD_COUNT_CHECK) {
+            JenkinsBuildResult buildStats = selfProxiedInstance.getBuildStats(buildCounter);
             if (buildStats.isBuildSuccessful()) {
-                lastSuccessfulBuild = lastBuild;
+                lastSuccessfulBuild = buildCounter;
             }
-            if (buildStats.getCommitIds().contains(commitId)) {
-                return selfProxiedInstance.getBuildFinishDate(lastSuccessfulBuild);
+            for (String commit : commits) {
+                if (buildStats.getCommitIds().contains(commit)) {
+                    return selfProxiedInstance.getBuildFinishDate(lastSuccessfulBuild);
+                }
             }
-            lastBuild--;
+            buildCounter--;
         }
         return null;
     }

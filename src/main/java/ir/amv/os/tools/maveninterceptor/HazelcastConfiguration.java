@@ -29,6 +29,12 @@ public class HazelcastConfiguration {
                                 )
                 .addMapConfig(
                         new MapConfig()
+                                .setName("artifactReleaseMap")
+                                .setMaxSizeConfig(new MaxSizeConfig(10000, MaxSizeConfig.MaxSizePolicy.PER_NODE))
+                                .setEvictionPolicy(EvictionPolicy.LRU)
+                                )
+                .addMapConfig(
+                        new MapConfig()
                                 .setName("buildFinishDate")
                                 .setMaxSizeConfig(new MaxSizeConfig(1000, MaxSizeConfig.MaxSizePolicy.PER_NODE))
                                 .setEvictionPolicy(EvictionPolicy.LRU)

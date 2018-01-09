@@ -7,6 +7,7 @@ import ir.amv.os.tools.maveninterceptor.interceptor.impl.artifactory.IArtifactor
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -74,11 +75,11 @@ public class VersionRangeTimestampInterceptorImpl
             try {
                 LOGGER.info("got request for maven-metadata: '{}', threshold: '{}'", requestURI, context
                         .getThreshold());
-                String artifactPath = requestURI.substring(0, requestURI.length() - "maven-metadata.xml".length());
-                Map<String, Date> versionReleaseMap = artifactoryApi.getReleaseDatesFor(artifactPath);
-                LOGGER.debug("version release map: '{}', threshold: '{}'", versionReleaseMap, context.getThreshold());
+                Map<String, Date> versionReleaseMap = getReleaseMapFromArtifactoryApi(requestURI);
+                LOGGER.info("version release map: '{}', threshold: '{}'", versionReleaseMap, context.getThreshold());
                 String[] hashes = transformMetaData(context.getInputStream().apply(null), context.getOutputStream(),
                         context.getThreshold(), versionReleaseMap, requestURI);
+                LOGGER.info("transform finished");
                 versionMD5Map.put(requestURI + ".md5" + context.getThreshold().getTime(), hashes[0]);
                 versionSHA1Map.put(requestURI + ".sha1" + context.getThreshold().getTime(), hashes[1]);
                 context.setFinished(true);
@@ -94,7 +95,13 @@ public class VersionRangeTimestampInterceptorImpl
         }
     }
 
-    private void handleHash(final RequestInterceptContext context, final String algorithm, final WaitASecondMap<String, String> hashMap) throws RequestInterceptException {
+    private Map<String, Date> getReleaseMapFromArtifactoryApi(final String requestURI) throws IOException, ParseException {
+        String artifactPath = requestURI.substring(0, requestURI.length() - "maven-metadata.xml".length());
+        return artifactoryApi.getReleaseDatesFor(artifactPath);
+    }
+
+    private void handleHash(final RequestInterceptContext context, final String algorithm,
+                            final WaitASecondMap<String, String> hashMap) throws RequestInterceptException {
         if (context.getRequestURI().endsWith("maven-metadata.xml." + algorithm)) {
             LOGGER.info("got request for maven-metadata hash: '{}', algorithm: '{}', threshold: '{}'", context
                     .getRequestURI(), algorithm, context.getThreshold());
