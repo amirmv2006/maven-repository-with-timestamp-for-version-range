@@ -2,6 +2,7 @@ package ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.util;
 
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.IGitApi;
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.IJenkinsApi;
+import org.eclipse.jgit.api.CloneCommand;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.api.ListBranchCommand;
 import org.eclipse.jgit.api.errors.GitAPIException;
@@ -23,6 +24,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -44,6 +46,8 @@ public class GitApiImpl
     @Autowired
     private IJenkinsApi jenkinsApi;
 
+    @Value("${git.clone.url}")
+    private String gitCloneUrl;
     @Value("${git.local.repo}")
     private String gitRepo;
     @Value("${git.local.username}")
@@ -59,9 +63,13 @@ public class GitApiImpl
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(username, password));
     }
 
-    @Scheduled(initialDelay = 10_000, fixedRate = 6 * 60 * 60_000)
+    @Scheduled(initialDelay = 10_000, fixedRate = 1 * 60 * 60_000)
     public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
-        try (Repository repository = new FileRepository(gitRepo)) {
+        File gitFolder = new File(gitRepo);
+        if (!gitFolder.exists()) {
+            checkout(gitFolder);
+        }
+        try (Repository repository = new FileRepository(gitFolder)) {
             Git git = new Git(repository);
             List<Ref> remoteBranchListCall = git.branchList().setListMode(ListBranchCommand.ListMode.REMOTE).call();
             Set<String> currentLiveBranches = new HashSet<>();
@@ -82,6 +90,11 @@ public class GitApiImpl
             liveBranches.forEach(selfProxiedInstance::invalidateBranchCache);
             liveBranches = currentLiveBranches;
         }
+    }
+
+    private void checkout(final File gitFolder) throws GitAPIException{
+        CloneCommand cc = new CloneCommand().setDirectory(gitFolder.getParentFile()).setURI(gitCloneUrl);
+        cc.call();
     }
 
     @Override
@@ -122,4 +135,5 @@ public class GitApiImpl
     public synchronized void invalidateBranchCache(final String branchName) {
         LOGGER.debug("invalidating cache for {}", branchName);
     }
+
 }

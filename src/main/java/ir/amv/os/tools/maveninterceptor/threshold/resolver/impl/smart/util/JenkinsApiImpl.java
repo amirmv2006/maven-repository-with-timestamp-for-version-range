@@ -73,7 +73,7 @@ public class JenkinsApiImpl
     // need to wait for cache to be initialized:
     // org.springframework.cache.interceptor.CacheAspectSupport.afterSingletonsInstantiated() will be called
     // after PostConstructs...
-    @Scheduled(initialDelay = 5_000, fixedRate = 6 * 60 * 60_000)
+    @Scheduled(initialDelay = 5_000, fixedRate = 4 * 60 * 60_000)
     public void cacheLastBuilds() throws IOException {
         Long lastBuild = getLastBuild();
         Long targetBuild = lastBuild - cacheBuildCount;
