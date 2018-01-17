@@ -7,7 +7,6 @@ import ir.amv.os.tools.maveninterceptor.interceptor.impl.artifactory.IArtifactor
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
@@ -27,24 +26,18 @@ import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathExpressionException;
 import javax.xml.xpath.XPathFactory;
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
-import java.net.URL;
-import java.net.URLConnection;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.Map;
-import java.util.StringTokenizer;
 
 /**
  * @author Amir
@@ -58,8 +51,8 @@ public class VersionRangeTimestampInterceptorImpl
 
     // for each threshold we have different maven-metadata, so the key is combination of metadata path and threshold
     // date
-    private WaitASecondMap<String, String> versionSHA1Map = new WaitASecondMap<>();
-    private WaitASecondMap<String, String> versionMD5Map = new WaitASecondMap<>();
+    private WaitASecondMap<String, String> sha1LiterallyHashMap = new WaitASecondMap<>();
+    private WaitASecondMap<String, String> md5LiterallyHashMap = new WaitASecondMap<>();
     @Autowired
     private IArtifactoryApi artifactoryApi;
 
@@ -80,18 +73,18 @@ public class VersionRangeTimestampInterceptorImpl
                 String[] hashes = transformMetaData(context.getInputStream().apply(null), context.getOutputStream(),
                         context.getThreshold(), versionReleaseMap, requestURI);
                 LOGGER.info("transform finished");
-                versionMD5Map.put(requestURI + ".md5" + context.getThreshold().getTime(), hashes[0]);
-                versionSHA1Map.put(requestURI + ".sha1" + context.getThreshold().getTime(), hashes[1]);
+                md5LiterallyHashMap.put(requestURI + ".md5" + context.getThreshold().getTime(), hashes[0]);
+                sha1LiterallyHashMap.put(requestURI + ".sha1" + context.getThreshold().getTime(), hashes[1]);
                 context.setFinished(true);
             } catch (Exception e) {
                 // release the locks
-                versionMD5Map.put(requestURI + ".md5" + context.getThreshold().getTime(), N_A);
-                versionSHA1Map.put(requestURI + ".sha1" + context.getThreshold().getTime(), N_A);
+                md5LiterallyHashMap.put(requestURI + ".md5" + context.getThreshold().getTime(), N_A);
+                sha1LiterallyHashMap.put(requestURI + ".sha1" + context.getThreshold().getTime(), N_A);
                 throw new RequestInterceptException("Exception", e);
             }
         } else {
-            handleHash(context, "sha1", versionSHA1Map);
-            handleHash(context, "md5", versionMD5Map);
+            handleHash(context, "sha1", sha1LiterallyHashMap);
+            handleHash(context, "md5", md5LiterallyHashMap);
         }
     }
 
@@ -114,6 +107,7 @@ public class VersionRangeTimestampInterceptorImpl
                 } else {
                     LOGGER.error("problem with request '{}', not returning hash", context.getRequestURI());
                 }
+                hashMap.remove(key);
             } catch (Exception e) {
                 LOGGER.error("problem with request", e);
                 throw new RequestInterceptException("Exception", e);
