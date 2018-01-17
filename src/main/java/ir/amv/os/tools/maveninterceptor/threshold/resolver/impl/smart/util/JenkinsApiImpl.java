@@ -19,11 +19,13 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * @author Amir
@@ -50,24 +52,24 @@ public class JenkinsApiImpl
     @Autowired
     private IJenkinsApi selfProxiedInstance;
 
-    public InputStream executeHttpGetRequest(final String getUrl) throws IOException {
-        try (DefaultHttpClient httpClient = new DefaultHttpClient()) {
-            // Then provide the right credentials
-            httpClient.getCredentialsProvider().setCredentials(new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT),
-                    new UsernamePasswordCredentials(username, password));
+    public InputStream executeHttpGetRequest(final String getUrl, final AtomicReference<Closeable> closeableReference) throws IOException {
+        DefaultHttpClient httpClient = new DefaultHttpClient();
+        closeableReference.set(httpClient);
+        // Then provide the right credentials
+        httpClient.getCredentialsProvider().setCredentials(new AuthScope(AuthScope.ANY_HOST, AuthScope.ANY_PORT),
+                new UsernamePasswordCredentials(username, password));
 
-            // Generate BASIC scheme object and stick it to the execution context
-            BasicScheme basicAuth = new BasicScheme();
-            BasicHttpContext context = new BasicHttpContext();
-            context.setAttribute("preemptive-auth", basicAuth);
+        // Generate BASIC scheme object and stick it to the execution context
+        BasicScheme basicAuth = new BasicScheme();
+        BasicHttpContext context = new BasicHttpContext();
+        context.setAttribute("preemptive-auth", basicAuth);
 
-            // Add as the first (because of the zero) request interceptor
-            // It will first intercept the request and preemptively initialize the authentication scheme if there is not
-            httpClient.addRequestInterceptor(new PreemptiveAuth(), 0);
-            CloseableHttpResponse execute = httpClient.execute(new HttpGet(getUrl), context);
-            HttpEntity entity = execute.getEntity();
-            return entity.getContent();
-        }
+        // Add as the first (because of the zero) request interceptor
+        // It will first intercept the request and preemptively initialize the authentication scheme if there is not
+        httpClient.addRequestInterceptor(new PreemptiveAuth(), 0);
+        CloseableHttpResponse execute = httpClient.execute(new HttpGet(getUrl), context);
+        HttpEntity entity = execute.getEntity();
+        return entity.getContent();
     }
 
     // need to wait for cache to be initialized:
@@ -91,12 +93,18 @@ public class JenkinsApiImpl
     @Override
     public Long getLastBuild() throws IOException {
         String getUrl = getJenkinsUrlFor(null, "lastBuild[number]");
-        try (InputStream content = executeHttpGetRequest(getUrl)) {
+        AtomicReference<Closeable> closeableReference = new AtomicReference<>();
+        try (InputStream content = executeHttpGetRequest(getUrl, closeableReference)) {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode jsonNode = objectMapper.reader().readTree(content);
             JsonNode lastBuild = jsonNode.get("lastBuild");
             JsonNode number = lastBuild.get("number");
             return number.asLong();
+        } finally {
+            Closeable closeable = closeableReference.get();
+            if (closeable != null) {
+                closeable.close();
+            }
         }
     }
 
@@ -106,7 +114,8 @@ public class JenkinsApiImpl
         LOGGER.info("Getting Build Stats for {}", buildNo);
         List<String> result = new ArrayList<>();
         String getUrl = getJenkinsUrlFor(buildNo, "changeSets[items[commitId]]", "result");
-        try (InputStream content = executeHttpGetRequest(getUrl)) {
+        AtomicReference<Closeable> closeableReference = new AtomicReference<>();
+        try (InputStream content = executeHttpGetRequest(getUrl, closeableReference)) {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode jsonNode = objectMapper.reader().readTree(content);
             JsonNode changeSets = jsonNode.get("changeSets");
@@ -118,6 +127,11 @@ public class JenkinsApiImpl
             }
             boolean buildSuccessful = jsonNode.get("result").asText().equals("SUCCESS");
             return new JenkinsBuildResult(buildSuccessful, result);
+        } finally {
+            Closeable closeable = closeableReference.get();
+            if (closeable != null) {
+                closeable.close();
+            }
         }
     }
 
@@ -146,12 +160,18 @@ public class JenkinsApiImpl
     public Date getBuildFinishDate(Long buildNo) throws IOException {
         LOGGER.info("Getting build finish date for {}", buildNo);
         String getUrl = getJenkinsUrlFor(buildNo, "timestamp", "duration");
-        try (InputStream content = executeHttpGetRequest(getUrl)) {
+        AtomicReference<Closeable> closeableReference = new AtomicReference<>();
+        try (InputStream content = executeHttpGetRequest(getUrl, closeableReference)) {
             ObjectMapper objectMapper = new ObjectMapper();
             JsonNode jsonNode = objectMapper.reader().readTree(content);
             JsonNode startTimestamp = jsonNode.get("timestamp");
             JsonNode duration = jsonNode.get("duration");
             return new Date(startTimestamp.asLong() + duration.asLong());
+        } finally {
+            Closeable closeable = closeableReference.get();
+            if (closeable != null) {
+                closeable.close();
+            }
         }
     }
 
