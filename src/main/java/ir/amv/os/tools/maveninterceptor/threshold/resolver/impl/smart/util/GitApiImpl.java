@@ -59,17 +59,17 @@ public class GitApiImpl
     private static final int PAGE_SIZE = 10;
 
     @PostConstruct
-    public void initialize() {
+    public void initialize() throws GitAPIException {
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(username, password));
-    }
-
-    @Scheduled(initialDelay = 10_000, fixedRate = 1 * 60 * 60_000)
-    public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
         File gitFolder = new File(gitRepo);
         if (!gitFolder.exists()) {
             checkout(gitFolder);
         }
-        try (Repository repository = new FileRepository(gitFolder)) {
+    }
+
+    @Scheduled(initialDelay = 10_000, fixedRate = 1 * 60 * 60_000)
+    public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
+        try (Repository repository = new FileRepository(gitRepo)) {
             Git git = new Git(repository);
             List<Ref> remoteBranchListCall = git.branchList().setListMode(ListBranchCommand.ListMode.REMOTE).call();
             Set<String> currentLiveBranches = new HashSet<>();
