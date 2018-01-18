@@ -61,15 +61,24 @@ public class GitApiImpl
     @PostConstruct
     public void initialize() throws GitAPIException {
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(username, password));
-        File gitFolder = new File(gitRepo);
+        File gitFolder = new File(getDotGitPath());
         if (!gitFolder.exists()) {
+            LOGGER.info("Git folder '{}' doesn't exist, checking out '{}'", getDotGitPath(), gitCloneUrl);
             checkout(gitFolder);
+            LOGGER.info("Git checkout successful");
         }
+    }
+
+    private String getDotGitPath() {
+        if (!gitRepo.endsWith(".git")) {
+            gitRepo += gitRepo + File.separatorChar + ".git";
+        }
+        return gitRepo;
     }
 
     @Scheduled(initialDelay = 10_000, fixedRate = 1 * 60 * 60_000)
     public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
-        try (Repository repository = new FileRepository(gitRepo)) {
+        try (Repository repository = new FileRepository(getDotGitPath())) {
             Git git = new Git(repository);
             List<Ref> remoteBranchListCall = git.branchList().setListMode(ListBranchCommand.ListMode.REMOTE).call();
             Set<String> currentLiveBranches = new HashSet<>();
@@ -103,7 +112,7 @@ public class GitApiImpl
             GitAPIException {
         LOGGER.info("getLastMergedCommitId for {}", branchName);
         liveBranches.add(branchName);
-        try (Repository repository = new FileRepository(gitRepo)) {
+        try (Repository repository = new FileRepository(getDotGitPath())) {
             Git git = new Git(repository);
             ObjectId master = repository.parseCommit(repository.resolve("origin/master"));
             int skip = 0;
