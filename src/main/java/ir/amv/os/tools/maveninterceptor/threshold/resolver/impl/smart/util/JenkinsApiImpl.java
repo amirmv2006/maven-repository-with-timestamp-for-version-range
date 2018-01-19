@@ -34,7 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 public class JenkinsApiImpl
         implements IJenkinsApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(JenkinsApiImpl.class);
-    private static final long MAX_BUILD_COUNT_CHECK = 50;
+    private static final long MAX_BUILD_COUNT_CHECK = 500;
     private static final String API_JSON = "/api/json?pretty=true";
 
     @Value("${jenkins.server.master.job.address}")

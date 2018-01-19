@@ -9,7 +9,6 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.internal.storage.file.FileRepository;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
-import org.eclipse.jgit.lib.Repository;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.transport.CredentialsProvider;
@@ -24,6 +23,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import javax.annotation.PreDestroy;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -57,9 +57,11 @@ public class GitApiImpl
 
     private Set<String> liveBranches = new HashSet<>();
     private static final int PAGE_SIZE = 10;
+    private FileRepository repository;
+    private Git git;
 
     @PostConstruct
-    public void initialize() throws GitAPIException {
+    public void initialize() throws GitAPIException, IOException {
         CredentialsProvider.setDefault(new UsernamePasswordCredentialsProvider(username, password));
         File gitFolder = new File(getDotGitPath());
         if (!gitFolder.exists()) {
@@ -67,41 +69,46 @@ public class GitApiImpl
             checkout(gitFolder);
             LOGGER.info("Git checkout successful");
         }
+        repository = new FileRepository(gitFolder);
+        git = new Git(repository);
+    }
+
+    @PreDestroy
+    public void preDestroy() {
+        repository.close();
     }
 
     private String getDotGitPath() {
         if (!gitRepo.endsWith(".git")) {
-            gitRepo += gitRepo + File.separatorChar + ".git";
+            gitRepo += File.separatorChar + ".git";
         }
         return gitRepo;
     }
 
     @Scheduled(initialDelay = 10_000, fixedRate = 1 * 60 * 60_000)
     public synchronized void houseKeepLiveBranchesCaches() throws IOException, GitAPIException {
-        try (Repository repository = new FileRepository(getDotGitPath())) {
-            Git git = new Git(repository);
-            List<Ref> remoteBranchListCall = git.branchList().setListMode(ListBranchCommand.ListMode.REMOTE).call();
-            Set<String> currentLiveBranches = new HashSet<>();
-            for (Ref branchRef : remoteBranchListCall) {
-                String branchRefName = branchRef.getName();
-                if (branchRefName.startsWith("refs/remotes/origin/")) {
-                    branchRefName = branchRefName.substring("refs/remotes/origin/".length());
-                }
-                LOGGER.debug("found remote branch: {}", branchRefName);
-                currentLiveBranches.add(branchRefName);
-                List<String> lastMergedCommitId = selfProxiedInstance.getLastMergedCommitId(branchRefName);
-                Date finishDate = jenkinsApi.findSuccessfulBuildFinishDateForCommitId(lastMergedCommitId);
-                LOGGER.debug("last merged commit to master for branch '{}' is {} and the finish date for successful " +
-                                "build after this commit is {}", branchRefName, lastMergedCommitId, finishDate);
+        List<Ref> remoteBranchListCall = git.branchList().setListMode(ListBranchCommand.ListMode.REMOTE).call();
+        Set<String> currentLiveBranches = new HashSet<>();
+        for (Ref branchRef : remoteBranchListCall) {
+            String branchRefName = branchRef.getName();
+            if (branchRefName.startsWith("refs/remotes/origin/")) {
+                branchRefName = branchRefName.substring("refs/remotes/origin/".length());
             }
-            liveBranches.removeAll(currentLiveBranches);
-            LOGGER.debug("invalidating cahce for obsolete branches {}", liveBranches);
-            liveBranches.forEach(selfProxiedInstance::invalidateBranchCache);
-            liveBranches = currentLiveBranches;
+            LOGGER.debug("found remote branch: {}", branchRefName);
+            currentLiveBranches.add(branchRefName);
+            List<String> lastMergedCommitId = selfProxiedInstance.getLastMergedCommitId(branchRefName);
+            Date finishDate = jenkinsApi.findSuccessfulBuildFinishDateForCommitId(lastMergedCommitId);
+            LOGGER.debug("last merged commit to master for branch '{}' is {} and the finish date for successful " +
+                    "build after this commit is {}", branchRefName, lastMergedCommitId, finishDate);
+            break;
         }
+        liveBranches.removeAll(currentLiveBranches);
+        LOGGER.debug("invalidating cahce for obsolete branches {}", liveBranches);
+        liveBranches.forEach(selfProxiedInstance::invalidateBranchCache);
+        liveBranches = currentLiveBranches;
     }
 
-    private void checkout(final File gitFolder) throws GitAPIException{
+    private void checkout(final File gitFolder) throws GitAPIException {
         CloneCommand cc = new CloneCommand().setDirectory(gitFolder.getParentFile()).setURI(gitCloneUrl);
         cc.call();
     }
@@ -112,29 +119,26 @@ public class GitApiImpl
             GitAPIException {
         LOGGER.info("getLastMergedCommitId for {}", branchName);
         liveBranches.add(branchName);
-        try (Repository repository = new FileRepository(getDotGitPath())) {
-            Git git = new Git(repository);
-            ObjectId master = repository.parseCommit(repository.resolve("origin/master"));
-            int skip = 0;
-            while (skip < MAX_COMMIT_CHECK_COUNT) {
-                Iterable<RevCommit> revCommits = git.log().add(repository.resolve("origin/" + branchName))
-                        .setSkip(skip).setMaxCount(PAGE_SIZE).call();
-                RevWalk walk = new RevWalk(repository);
-                for (RevCommit revCommit : revCommits) {
-                    if (walk.isMergedInto(walk.parseCommit(revCommit.getId()), walk.parseCommit(master))) {
-                        List<String> result = new ArrayList<>();
-                        result.add(revCommit.getName());
-                        RevCommit[] parents = revCommit.getParents();
-                        if (parents != null) {
-                            for (RevCommit parent : parents) {
-                                result.add(parent.getName());
-                            }
+        ObjectId master = repository.parseCommit(repository.resolve("origin/master"));
+        int skip = 0;
+        while (skip < MAX_COMMIT_CHECK_COUNT) {
+            Iterable<RevCommit> revCommits = git.log().add(repository.resolve("origin/" + branchName))
+                    .setSkip(skip).setMaxCount(PAGE_SIZE).call();
+            RevWalk walk = new RevWalk(repository);
+            for (RevCommit revCommit : revCommits) {
+                if (walk.isMergedInto(walk.parseCommit(revCommit.getId()), walk.parseCommit(master))) {
+                    List<String> result = new ArrayList<>();
+                    result.add(revCommit.getName());
+                    RevCommit[] parents = revCommit.getParents();
+                    if (parents != null) {
+                        for (RevCommit parent : parents) {
+                            result.add(parent.getName());
                         }
-                        return result;
                     }
+                    return result;
                 }
-                skip += PAGE_SIZE;
             }
+            skip += PAGE_SIZE;
         }
         return null;
     }
