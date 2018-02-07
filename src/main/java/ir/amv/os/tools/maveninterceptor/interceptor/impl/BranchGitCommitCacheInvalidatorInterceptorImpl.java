@@ -9,6 +9,7 @@ import ir.amv.os.tools.maveninterceptor.interceptor.exc.RequestInterceptExceptio
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart.IGitApi;
 import org.eclipse.jgit.api.errors.GitAPIException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -17,6 +18,7 @@ import java.io.IOException;
  * @author Amir
  */
 @Component
+@Profile("smartThreshold")
 public class BranchGitCommitCacheInvalidatorInterceptorImpl
         implements IRequestInterceptor {
 

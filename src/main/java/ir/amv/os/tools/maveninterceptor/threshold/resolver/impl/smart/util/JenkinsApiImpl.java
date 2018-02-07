@@ -16,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -31,6 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * @author Amir
  */
 @Component
+@Profile("smartThreshold")
 public class JenkinsApiImpl
         implements IJenkinsApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(JenkinsApiImpl.class);

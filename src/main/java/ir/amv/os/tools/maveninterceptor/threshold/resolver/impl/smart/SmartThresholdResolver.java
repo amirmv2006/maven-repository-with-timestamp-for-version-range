@@ -2,6 +2,7 @@ package ir.amv.os.tools.maveninterceptor.threshold.resolver.impl.smart;
 
 import ir.amv.os.tools.maveninterceptor.threshold.resolver.IThresholdResolver;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
 import java.util.Date;
@@ -12,6 +13,7 @@ import java.util.Map;
  * @author Amir
  */
 @Component
+@Profile("smartThreshold")
 public class SmartThresholdResolver
         implements IThresholdResolver {
 

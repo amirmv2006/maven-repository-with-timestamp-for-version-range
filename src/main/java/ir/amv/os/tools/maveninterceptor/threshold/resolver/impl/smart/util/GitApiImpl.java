@@ -19,6 +19,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -36,6 +37,7 @@ import java.util.Set;
  * @author Amir
  */
 @Component
+@Profile("smartThreshold")
 public class GitApiImpl
         implements IGitApi {
     private static final Logger LOGGER = LoggerFactory.getLogger(GitApiImpl.class);
